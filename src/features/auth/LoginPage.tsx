@@ -1,8 +1,9 @@
-import { Box, Button, Container, TextField, Typography } from "@mui/material";
+import { Alert, Box, Container, TextField, Typography } from "@mui/material";
 import { useContext, useEffect, useState } from "react";
 import agent from "../../app/api/agent";
 import { AuthContext } from "../../app/context/AuthContext";
 import { useNavigate } from "react-router-dom";
+import { LoadingButton } from "@mui/lab";
 
 const stringEmpty: string = "";
 const usernameRegex: RegExp = /^[a-zA-Z0-9]{3,30}$/;
@@ -14,8 +15,16 @@ const pwdErrorMsg: string =
   "La contraseña debe tener al menos 8 caracteres y máximo 16";
 
 const LoginPage = () => {
-  const { authenticated, setAuthenticated } = useContext(AuthContext);
+  const { setAuthenticated } = useContext(AuthContext);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const token = localStorage.getItem("jwt");
+    if(token){
+      setAuthenticated(true);
+      navigate("/");
+    }
+  }, [navigate, setAuthenticated]);
 
   const [username, setUsername] = useState<string>(stringEmpty);
   const [pwd, setPwd] = useState<string>(stringEmpty);
@@ -24,6 +33,12 @@ const LoginPage = () => {
   const [pwdError, setPwdError] = useState<boolean>(false);
 
   const [disabled, setDisabled] = useState<boolean>(true);
+
+  // useState para manejar la animación de cargando del formulario
+  const [loading, setLoading] = useState<boolean>(false);
+
+  // useState para manejar mensaje de error cuando las credenciales sean inválidas
+  const [credentialsError, setCredentialsError] = useState<boolean>(false);
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -34,26 +49,35 @@ const LoginPage = () => {
   };
 
   const sendData = (username: string, password: string) => {
+    setLoading(true);
     agent.Auth.login({ username, password })
       .then((data) => {
+        localStorage.setItem("jwt", data.token);
         setAuthenticated(true);
         navigate("/");
       })
       .catch((err) => {
-        console.log(err);
+        setCredentialsError(true);
+      })
+      .finally(() => {
+        setLoading(false);
+        setUsername(stringEmpty);
+        setPwd(stringEmpty);
       });
   };
 
+  
+
   useEffect(() => {
-    if (usernameError || pwdError) {
-      setDisabled(true);
-    } else {
-      setDisabled(false);
-    }
-  }, [usernameError, pwdError]);
+    const hasUsernameError = usernameError || username === stringEmpty;
+    const hasPwdError = pwdError || pwd === stringEmpty;
+
+    setDisabled(hasPwdError || hasUsernameError);
+  }, [pwd, pwdError, username, usernameError]);
 
   const handleFieldChange = (event: any) => {
     const { name, value } = event.target;
+    setCredentialsError(false);
     if (name === "username") {
       setUsername(value);
       const isValid = usernameRegex.test(value);
@@ -80,6 +104,9 @@ const LoginPage = () => {
         </Typography>
       </Box>
       <Box component="form" sx={{ mt: 1 }} noValidate onSubmit={handleSubmit}>
+        {credentialsError && (
+          <Alert severity="error">¡Credenciales Inválidas!</Alert>
+        )}
         <TextField
           margin="normal"
           required
@@ -105,7 +132,8 @@ const LoginPage = () => {
           error={pwdError}
           helperText={pwdError ? pwdErrorMsg : stringEmpty}
         />
-        <Button
+        <LoadingButton
+          loading={loading}
           type="submit"
           fullWidth
           variant="contained"
@@ -113,7 +141,7 @@ const LoginPage = () => {
           disabled={disabled}
         >
           Iniciar sesión
-        </Button>
+        </LoadingButton>
       </Box>
     </Container>
   );
